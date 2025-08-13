@@ -95,17 +95,28 @@ func questionResponse(ctx context.Context) error {
 
 	finalPrompt := fmt.Sprintf(prompt, content, question)
 
+	// This function will display the response as it comes from the server.
+	f := func(ctx context.Context, chunk []byte) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		fmt.Printf("%s", chunk)
+		return nil
+	}
+
+	fmt.Print("\nModel Response:\n\n")
+
 	// Send the prompt to the model server.
-	msg, err := llm.Call(
+	_, err = llm.Call(
 		ctx,
 		finalPrompt,
-		// llms.WithStreamingFunc(f),
+		llms.WithStreamingFunc(f),
 		llms.WithMaxTokens(1000),
 	)
 	if err != nil {
 		return fmt.Errorf("call: %w", err)
 	}
 
-	fmt.Printf("Answer from the LLM is: %s\n", msg)
 	return nil
 }
