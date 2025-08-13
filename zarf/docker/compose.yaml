@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:17.5
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ./sql-data:/var/lib/postgresql/data
+
+  mongodb:
+    image: mongodb/mongodb-atlas-local:latest
+    container_name: mongo-atlas
+    privileged: true
+    restart: always
+    environment:
+      - MONGODB_INITDB_ROOT_USERNAME=ardan
+      - MONGODB_INITDB_ROOT_PASSWORD=ardan
+    ports:
+      - 27017-27019:27017-27019
+    volumes:
+      - ./db_data:/data
+      - ./db_data/db:/data/db
+      - ./db_data/configdb:/data/configdb
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:v0.6.18
+    container_name: openwebui
+    restart: always
+    environment:
+      - WEBUI_AUTH=false
+      - GLOBAL_LOG_LEVEL="DEBUG"
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - 3000:8080
+    volumes:
+      - ./openwebui:/app/backend/data
+
+volumes:
+  postgres: {}
+  mongodb: {}
+  openwebui: {}
