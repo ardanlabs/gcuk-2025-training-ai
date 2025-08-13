@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -212,13 +213,11 @@ func run() error {
 		return fmt.Errorf("vectorSearch: %w", err)
 	}
 
-	_ = results
-
 	fmt.Print("Providing response:\n\n")
 
-	// if err := questionResponse(ctx, llm, question, results); err != nil {
-	// 	return fmt.Errorf("questionResponse: %w", err)
-	// }
+	if err := questionResponse(ctx, llm, question, results); err != nil {
+		return fmt.Errorf("questionResponse: %w", err)
+	}
 
 	fmt.Println("DONE")
 	return nil
@@ -447,4 +446,120 @@ func vectorSearch(ctx context.Context, llm *ollama.LLM, col *mongo.Collection, q
 	fmt.Print("\n")
 
 	return results, nil
+}
+
+func questionResponse(ctx context.Context, llm *ollama.LLM, question string, results []searchResult) error {
+
+	// -------------------------------------------------------------------------
+	// Let's filter the results to only include the ones with a score above 0.75.
+	// We don't need to include the score or embeddings in the final results.
+
+	type searchResult struct {
+		FileName    string `json:"file_name"`
+		Description string `json:"image_description"`
+	}
+
+	var finalResults []searchResult
+
+	fmt.Print("Data:\n\n")
+	for _, result := range results {
+		if result.Score >= 0.75 {
+			fmt.Printf("FileName[%s] Score[%.2f]\n", result.FileName, result.Score)
+			finalResults = append(finalResults, searchResult{
+				FileName:    result.FileName,
+				Description: result.Description,
+			})
+		}
+	}
+
+	content, err := json.Marshal(finalResults)
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+
+	// -------------------------------------------------------------------------
+	// Let's ask the LLM to provide a response
+
+	prompt := `
+	INSTRUCTIONS:
+	
+	- Use the following RESULTS to answer the user's question.
+
+	- The data will be a JSON array with the following fields:
+	
+	[
+		{
+			"file_name":string,
+			"image_description":string
+		},
+		{
+			"file_name":string,
+			"image_description":string
+		}
+	]
+
+	- The response should be in a JSON array with the following fields:
+	
+	[
+		{
+			"status": string,
+			"filename": string,
+			"description": string
+		},
+		{
+			"status": string,
+			"filename": string,
+			"description": string
+		}
+	]
+
+	- If there are no RESULTS, provide this response:
+	
+	[
+		{
+			"status": "not found"
+		}
+	]
+
+	- Do not change anything related to the file_name provided.
+	- Only provide a brief description of the image.
+	- Only provide a valid JSON response.
+
+	RESULTS:
+	
+	%s
+		
+	QUESTION:
+	
+	%s
+	`
+
+	finalPrompt := fmt.Sprintf(prompt, string(content), question)
+
+	// This function will display the response as it comes from the server.
+	f := func(ctx context.Context, chunk []byte) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		fmt.Printf("%s", chunk)
+		return nil
+	}
+
+	fmt.Print("\nResults:\n\n")
+
+	// Send the prompt to the model server.
+	_, err = llm.Call(
+		ctx,
+		finalPrompt,
+		llms.WithStreamingFunc(f),
+		llms.WithMaxTokens(500),
+	)
+	if err != nil {
+		return fmt.Errorf("call: %w", err)
+	}
+
+	fmt.Printf("\n\n")
+
+	return nil
 }
