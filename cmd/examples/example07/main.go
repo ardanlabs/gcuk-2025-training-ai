@@ -205,6 +205,8 @@ Question: %s
 
 	finalPrompt := fmt.Sprintf(prompt, content, question)
 
+	fmt.Printf("\n\nFINAL PROMPT:::\n%s\n\n\n", finalPrompt)
+
 	// This function will display the response as it comes from the server.
 	f := func(ctx context.Context, chunk []byte) error {
 		if ctx.Err() != nil {
